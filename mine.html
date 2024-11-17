@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quant Minesweeper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+        }
+        #game-area, #landing-form {
+            background: #1e293b;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
+            padding: 30px;
+            width: 90%;
+            max-width: 600px;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 0 auto;
+            border: 2px solid #475569;
+        }
+        td {
+            width: 30px;
+            height: 30px;
+            text-align: center;
+            border: 1px solid #64748b;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            background-color: #1e293b;
+            color: #cbd5e1;
+        }
+        td:hover {
+            background-color: #3b82f6;
+        }
+        td.revealed {
+            background-color: #111827;
+            color: #94a3b8;
+            cursor: default;
+        }
+        td.mine {
+            background-color: #ef4444;
+            color: white;
+            font-weight: bold;
+        }
+        td.safe {
+            background-color: #16a34a;
+            color: #e0f2fe;
+        }
+        #start-button {
+            background: linear-gradient(to right, #6366f1, #3b82f6);
+            color: #e2e8f0;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: background 0.3s ease;
+        }
+        #start-button:hover {
+            background: linear-gradient(to right, #4338ca, #2563eb);
+        }
+        input[type="text"] {
+            padding: 12px;
+            border-radius: 8px;
+            border: 2px solid #64748b;
+            outline: none;
+            width: 90%;
+            margin-bottom: 20px;
+            background-color: #1e293b;
+            color: #f8fafc;
+        }
+        input[type="text"]:focus {
+            border-color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen">
+    <div id="landing-form" class="text-center p-8">
+        <h1 class="text-5xl font-bold mb-6 text-white">Welcome to Quant Minesweeper</h1>
+        <input type="text" id="player-name" placeholder="Enter your name" class="px-4 py-2 rounded-md mb-4">
+        <button id="start-button" onclick="startGame()">Start Game</button>
+    </div>
+    <div id="game-area" class="hidden p-8">
+        <h1 class="text-4xl font-bold mb-4 text-white">Quant Minesweeper</h1>
+        <p class="text-lg mb-6">Player: <span id="player" class="font-semibold"></span></p>
+        <p class="text-lg mb-6">Current Money: $<span id="money" class="font-bold">100000</span></p>
+        <p class="text-lg mb-6">Score Multiplier: <span id="multiplier" class="font-bold">1x</span></p>
+        <table id="board"></table>
+    </div>
+    <footer class="mt-8 text-center text-gray-400">
+        Made with ❤️ by <a href="https://github.com/shashoriginal" class="text-blue-400 hover:underline">Shashank</a>
+    </footer>
+
+    <script>
+        const size = 30;
+        const numMines = 200; // Increased difficulty by adding more mines
+        let money = 100000;
+        let multiplier = 1;
+        const board = [];
+        const revealed = new Set();
+        const penalties = [];
+        const rewards = [];
+        let playerName = "";
+        let gameEnded = false;
+
+        function startGame() {
+            playerName = document.getElementById('player-name').value.trim();
+            if (!playerName) {
+                alert('Please enter your name to start the game.');
+                return;
+            }
+            document.getElementById('landing-form').classList.add('hidden');
+            document.getElementById('game-area').classList.remove('hidden');
+            document.getElementById('player').textContent = playerName;
+            renderBoard();
+        }
+
+        // Generate board with mines
+        function generateBoard(size, numMines) {
+            const board = Array.from({ length: size }, () => Array(size).fill(0));
+            let mines = 0;
+            while (mines < numMines) {
+                const x = Math.floor(Math.random() * size);
+                const y = Math.floor(Math.random() * size);
+                if (board[x][y] !== -1) {
+                    board[x][y] = -1;
+                    mines++;
+                    // Update neighboring cells
+                    for (let i = -1; i <= 1; i++) {
+                        for (let j = -1; j <= 1; j++) {
+                            const nx = x + i;
+                            const ny = y + j;
+                            if (nx >= 0 && ny >= 0 && nx < size && ny < size && board[nx][ny] !== -1) {
+                                board[nx][ny]++;
+                            }
+                        }
+                    }
+                }
+            }
+            return board;
+        }
+
+        // Reveal cell logic
+        function revealCell(x, y) {
+            if (revealed.has(`${x},${y}`) || gameEnded) {
+                return;
+            }
+            const cell = document.getElementById(`cell-${x}-${y}`);
+            revealed.add(`${x},${y}`);
+            if (board[x][y] === -1) {
+                const loss = 20000 * multiplier; // Loss increases with multiplier
+                money -= loss;
+                penalties.push(`Mine hit at (${x}, ${y})! Penalty: -$${loss}`);
+                multiplier = 1; // Reset multiplier after hitting a mine
+                cell.classList.add('mine');
+                cell.textContent = 'X';
+                if (money <= 0) {
+                    alert("You've hit a mine and run out of money. Game over!");
+                    revealAllTiles();
+                    displayStatistics();
+                    return;
+                } else {
+                    alert(`You hit a mine! You lose $${loss}! Current Money: $${money}`);
+                }
+            } else {
+                const reward = 1000 * multiplier; // Reward increases with multiplier
+                money += reward;
+                rewards.push(`Safe cell at (${x}, ${y})! Reward: +$${reward}`);
+                multiplier += 0.1; // Increase multiplier for each successful reveal
+                cell.classList.add('revealed');
+                cell.classList.add('safe');
+                cell.textContent = board[x][y] === 0 ? '' : board[x][y];
+                if (board[x][y] === 0) {
+                    // Reveal neighbors if it's a zero
+                    for (let i = -1; i <= 1; i++) {
+                        for (let j = -1; j <= 1; j++) {
+                            const nx = x + i;
+                            const ny = y + j;
+                            if (nx >= 0 && ny >= 0 && nx < size && ny < size) {
+                                revealCell(nx, ny);
+                            }
+                        }
+                    }
+                }
+            }
+            document.getElementById('money').textContent = money;
+            document.getElementById('multiplier').textContent = `${multiplier.toFixed(1)}x`;
+            if (revealed.size === size * size - numMines) {
+                alert(`Congratulations! You've revealed all safe cells and your final balance is $${money}!`);
+                revealAllTiles();
+                displayStatistics();
+            }
+        }
+
+        // Reveal all tiles (both mines and safe cells) at game over
+        function revealAllTiles() {
+            gameEnded = true;
+            for (let x = 0; x < size; x++) {
+                for (let y = 0; y < size; y++) {
+                    const cell = document.getElementById(`cell-${x}-${y}`);
+                    if (board[x][y] === -1) {
+                        cell.classList.add('mine');
+                        cell.textContent = 'X';
+                    } else if (!revealed.has(`${x},${y}`)) {
+                        cell.classList.add('revealed');
+                        cell.classList.add('safe');
+                        cell.textContent = board[x][y] === 0 ? '' : board[x][y];
+                    }
+                }
+            }
+        }
+
+        // Render the board
+        function renderBoard() {
+            const boardElement = document.getElementById('board');
+            boardElement.innerHTML = '';
+            for (let i = 0; i < size; i++) {
+                const row = document.createElement('tr');
+                for (let j = 0; j < size; j++) {
+                    const cell = document.createElement('td');
+                    cell.id = `cell-${i}-${j}`;
+                    cell.onclick = () => revealCell(i, j);
+                    row.appendChild(cell);
+                }
+                boardElement.appendChild(row);
+            }
+        }
+
+        // Display player statistics at the end of the game
+        function displayStatistics() {
+            let statsMessage = `Game Over for ${playerName}!
+`;
+            statsMessage += `Final Money: $${money}
+`;
+            statsMessage += `Total Mines Hit: ${penalties.length}
+`;
+            statsMessage += `Total Safe Cells Revealed: ${rewards.length}
+`;
+            statsMessage += `Details:
+`;
+            statsMessage += penalties.concat(rewards).join('\n');
+            alert(statsMessage);
+        }
+
+        // Initialize the game
+        board.push(...generateBoard(size, numMines));
+    </script>
+</body>
+</html>
